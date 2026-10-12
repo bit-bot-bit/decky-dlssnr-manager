@@ -1,0 +1,10 @@
+{
+  "name": "DLSSNR Manager",
+  "author": "bit-bot-bit",
+  "flags": ["_root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["steam", "reshade", "dlssnr", "proton"],
+    "description": "Safely install and remove the DLSSNR ReShade route from selected offline Steam games. NVIDIA model files are never bundled."
+  }
+}

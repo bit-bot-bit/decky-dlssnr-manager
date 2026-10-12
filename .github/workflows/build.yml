@@ -1,0 +1,58 @@
+name: Build Decky plugin
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - name: Build Decky sidebar
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm build
+      - name: Fetch pinned, model-free upstream runtime source
+        uses: actions/checkout@v4
+        with:
+          repository: mauri870/DLSSNR-RDNA3
+          ref: 5f099e2
+          path: upstream
+      - name: Build upstream Linux assets without an NVIDIA model
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build mingw-w64 g++-multilib python3
+          cd upstream
+          bash fetch_deps.sh
+          bash linux/build/build_vulkan_loader.sh
+          NR_ARCH=x86_64 bash linux/build/build_package.sh
+          NR_ARCH=i686 bash linux/build/build_package.sh
+          for archive in linux/package/*.tar.gz; do
+            ! tar -tzf "$archive" | grep -E '/dlssnr\.bin$'
+          done
+      - name: Assemble plugin runtime and enforce model exclusion
+        run: |
+          python3 scripts/assemble-runtime.py upstream/linux/package/*.tar.gz --output runtime
+          ! find runtime -type f -name dlssnr.bin -print -quit | grep -q .
+          pnpm package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: decky-dlssnr-manager
+          path: release/*.zip
+          if-no-files-found: error
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: gh release create "$GITHUB_REF_NAME" release/*.zip --generate-notes
